@@ -1,0 +1,68 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+<link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.min.css" />
+
+<div class="text-center">
+    <h1 class="display-4">Welcome</h1>
+    <table id="example" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Position</th>
+                <th>Department</th>
+                <th>Age</th>
+                <th>Start date</th>
+                <th>Salary</th>
+            </tr>
+        </thead>
+    </table>
+
+    
+
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.2/moment.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#example').DataTable({
+                "ajax": {
+                    url: "@Url.Action("GetData", "Home")",
+                    type: "POST",
+                    data: function (d) {
+                        var requestData = {};
+                        if (d) {
+                            requestData = {
+                                draw: d.draw ? d.draw : 1 ,
+                                start: d.start,
+                                length: d.length,
+                                searchValue: d.search && d.search.value ? d.search.value : '',
+                                orderColumn: d.order && d.order.length > 0 ? d.order[0].column : 0,
+                                orderDir: d.order && d.order.length > 0 ? d.order[0].dir : 'asc'
+                            };
+                            console.log('requestData:', requestData);  
+                        }
+                        return JSON.stringify(requestData);
+                    },
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json"
+                },
+                columns: [
+                    { "data": "name" },
+                    { "data": "position" },
+                    { "data": "department" },
+                    { "data": "age" },
+                    { "data": "startDate" },
+                    { "data": "salary" }
+                ],
+                deferLoading: 100,
+                processing: true,
+                serverSide: true,
+                pageLength: 10
+            });
+        });
+    </script>
+}
