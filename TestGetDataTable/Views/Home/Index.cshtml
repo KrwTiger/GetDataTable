@@ -63,6 +63,24 @@
                 serverSide: true,
                 pageLength: 10
             });
+
+            GettingCache()
         });
+
+        function GettingCache() {
+
+            var key = "DataEmployee"
+            $.ajax({
+                url: "@Url.Action("GetCache", "Home")",
+                type: 'GET',
+                data: { key: key },
+                success: function (data) {
+                    console.log('Data from server:', data);
+                },
+                error: function (err) {
+                    console.error('Error:', err);
+                }
+            });
+        }
     </script>
 }
