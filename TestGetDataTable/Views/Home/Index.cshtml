@@ -8,6 +8,7 @@
     <table id="example" class="display" style="width:100%">
         <thead>
             <tr>
+                <th>#</th>
                 <th>Name</th>
                 <th>Position</th>
                 <th>Department</th>
@@ -29,7 +30,7 @@
     <script>
         $(document).ready(function () {
             $('#example').DataTable({
-                "ajax": {
+                ajax: {
                     url: "@Url.Action("GetData", "Home")",
                     type: "POST",
                     data: function (d) {
@@ -51,6 +52,7 @@
                     dataType: "json"
                 },
                 columns: [
+                    { "data": "id"},
                     { "data": "name" },
                     { "data": "position" },
                     { "data": "department" },

@@ -6,12 +6,6 @@ using Newtonsoft.Json;
 using System.Diagnostics;
 using TestGetDataTable.Context;
 using TestGetDataTable.Models;
-using StackExchange.Redis;
-using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
-using System.Buffers;
-using System.Collections;
-
 namespace TestGetDataTable.Controllers
 {
     public class HomeController : Controller
@@ -19,6 +13,7 @@ namespace TestGetDataTable.Controllers
         private readonly IDistributedCache _cache;
         private readonly ApplicationDbContext _context; // เชื่อมต่อกับ DbContext ของคุณที่มีชื่อว่า ApplicationDbContext
         private readonly ILogger<HomeController> _logger;
+
         public HomeController(IDistributedCache cache, ApplicationDbContext context, ILogger<HomeController> logger)
         {
             _cache = cache;
@@ -84,101 +79,100 @@ namespace TestGetDataTable.Controllers
                 string? orderDir = request.orderDir;
                 int dbtotal = 0;
 
-                IQueryable<Employee> query = _context.Employees;
-                // เช็คข้อมูลใน cache
-                //string cacheKey = $"DataEmployee_{start}_{length}_{searchValue}_{orderColumn}_{orderDir}";
                 var cachedData = await _cache.GetStringAsync("DataEmployee");
                 var employees = new List<Employee>();
+
                 if (!string.IsNullOrEmpty(cachedData))
                 {
                     stopwatch.Start();
-                    //if (string.IsNullOrEmpty(searchValue))
-                    //{
-                        employees = JsonConvert.DeserializeObject<List<Employee>>(cachedData);
-                    //}
-                    //else if (string.IsNullOrEmpty(searchValue) && orderColumn == 0 && orderDir.ToLower() == "asc")
-                    //{
-                    //    employees = employees.Take(10).ToList();
-                    //}
+                    employees = JsonConvert.DeserializeObject<List<Employee>>(cachedData);
+
+                    // Apply search filter if searchValue is provided
+                    if (!string.IsNullOrEmpty(searchValue))
+                    {
+                        employees = employees.Where(e =>
+                            e.Name.ToLower().Contains(searchValue.ToLower()) ||
+                            e.Position.ToLower().Contains(searchValue.ToLower()) ||
+                            e.Department.ToLower().Contains(searchValue.ToLower()) ||
+                            e.Age.ToString().Contains(searchValue) ||
+                            e.StartDate.ToString().Contains(searchValue) ||
+                            e.Salary.ToString().Contains(searchValue)
+                        ).ToList();
+                    }
+
+                    // Apply sorting
+                    if (!string.IsNullOrEmpty(orderDir))
+                    {
+                        employees = orderColumn switch
+                        {
+                            0 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.Id).ToList() : employees.OrderByDescending(e => e.Id).ToList(),
+                            1 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.Name).ToList() : employees.OrderByDescending(e => e.Name).ToList(),
+                            2 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.Position).ToList() : employees.OrderByDescending(e => e.Position).ToList(),
+                            3 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.Department).ToList() : employees.OrderByDescending(e => e.Department).ToList(),
+                            4 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.Age).ToList() : employees.OrderByDescending(e => e.Age).ToList(),
+                            5 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.StartDate).ToList() : employees.OrderByDescending(e => e.StartDate).ToList(),
+                            6 => orderDir.ToLower() == "asc" ? employees.OrderBy(e => e.Salary).ToList() : employees.OrderByDescending(e => e.Salary).ToList(),
+                            
+                            _ => employees
+                        };
+                    }
+
+                    // Pagination
+                    dbtotal = employees.Count();
+                    employees = employees.Skip(start).Take(length).ToList();
+
                     stopwatch.Stop();
                     Console.WriteLine("Elapsed Cache Time: {0} ms", stopwatch.ElapsedMilliseconds);
-
                 }
                 else
                 {
-
                     stopwatch.Start();
-                    //_logger.LogInformation(recordsTotal.ToString());
+                    var query = _context.Employees.AsQueryable();
+
+                    // Apply search filter if searchValue is provided
+                    if (!string.IsNullOrEmpty(searchValue))
+                    {
+                        query = query.Where(e =>
+                            e.Name.ToLower().Contains(searchValue.ToLower()) ||
+                            e.Position.ToLower().Contains(searchValue.ToLower()) ||
+                            e.Department.ToLower().Contains(searchValue.ToLower()) ||
+                            e.Age.ToString().Contains(searchValue) ||
+                            e.StartDate.ToString().Contains(searchValue) ||
+                            e.Salary.ToString().Contains(searchValue)
+                        );
+                    }
+
+                    // Apply sorting
+                    if (!string.IsNullOrEmpty(orderDir))
+                    {
+                        query = orderColumn switch
+                        {
+                            0 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.Id) : query.OrderByDescending(e => e.Id),
+                            1 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.Name) : query.OrderByDescending(e => e.Name),
+                            2 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.Position) : query.OrderByDescending(e => e.Position),
+                            3 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.Department) : query.OrderByDescending(e => e.Department),
+                            4 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.Age) : query.OrderByDescending(e => e.Age),
+                            5 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.StartDate) : query.OrderByDescending(e => e.StartDate),
+                            6 => orderDir.ToLower() == "asc" ? query.OrderBy(e => e.Salary) : query.OrderByDescending(e => e.Salary),
+                            _ => query
+                        };
+                    }
+
                     dbtotal = await query.CountAsync();
                     employees = await query.Skip(start).Take(length).ToListAsync();
+
                     stopwatch.Stop();
                     Console.WriteLine("Elapsed db Time: {0} ms", stopwatch.ElapsedMilliseconds);
-
-                    //var serializedEmployees = JsonConvert.SerializeObject(employees);
-                    //await _cache.SetStringAsync(cacheKey, serializedEmployees, new DistributedCacheEntryOptions
-                    //{
-                    //    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) // ปรับเวลาหมดอายุของ cache ตามต้องการ
-                    //});
                 }
 
-                stopwatch.Start();
-                if (!string.IsNullOrEmpty(searchValue))
-                {
-                    employees = employees.Where(e =>
-                        e.Name.ToLower().Contains(searchValue) ||
-                        e.Position.ToLower().Contains(searchValue) ||
-                        e.Department.ToLower().Contains(searchValue) ||
-                        e.Age.ToString().Contains(searchValue) ||
-                        e.StartDate.ToString().Contains(searchValue) ||
-                        e.Salary.ToString().Contains(searchValue)
-                    ).ToList();
-                }
-                stopwatch.Stop();
-                Console.WriteLine("Elapsed search Time: {0} ms", stopwatch.ElapsedMilliseconds);
-
-                //// Apply sorting
-                stopwatch.Start();
-                if (!string.IsNullOrEmpty(orderDir))
-                {
-                    switch (orderColumn)
-                    {
-                        case 0: // Index 0 is column Name
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Name).ToList() : employees.OrderByDescending(e => e.Name).ToList();
-                            break;
-                        case 1: // Index 1 is column Position
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Position).ToList() : employees.OrderByDescending(e => e.Position).ToList();
-                            break;
-                        case 2: // Index 2 is column Department
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Department).ToList() : employees.OrderByDescending(e => e.Department).ToList();
-                            break;
-                        case 3: // Index 3 is column Age
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Age).ToList() : employees.OrderByDescending(e => e.Age).ToList();
-                            break;
-                        case 4: // Index 4 is column StartDate
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.StartDate).ToList() : employees.OrderByDescending(e => e.StartDate).ToList();
-                            break;
-                        case 5: // Index 5 is column Salary
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Salary).ToList() : employees.OrderByDescending(e => e.Salary).ToList();
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                stopwatch.Stop();
-                Console.WriteLine("Elapsed sorting Time: {0} ms", stopwatch.ElapsedMilliseconds);
-
-                stopwatch.Start();
-                int recordsTotal = dbtotal != 0 ? dbtotal : employees.Count();
-                var data = employees.Skip(start).Take(length).ToList();
-                stopwatch.Stop();
-                Console.WriteLine("Elapsed reponse Time: {0} ms", stopwatch.ElapsedMilliseconds);
+                int recordsFiltered = dbtotal;
 
                 var response = new
                 {
                     draw = draw,
-                    recordsTotal = recordsTotal,
-                    recordsFiltered = recordsTotal,
-                    data = data
+                    recordsTotal = recordsFiltered,
+                    recordsFiltered = recordsFiltered,
+                    data = employees
                 };
 
                 return Ok(response);
@@ -196,26 +190,19 @@ namespace TestGetDataTable.Controllers
             var cachedData = await _cache.GetStringAsync(key);
             if (!string.IsNullOrEmpty(cachedData))
             {
-                return Content(cachedData);
+                return Content("use cache in memory ");
             }
 
-            // ดึงข้อมูลจากฐานข้อมูล
             var data = await _context.Employees.ToListAsync();
             var serializedData = JsonConvert.SerializeObject(data);
 
-            // เก็บข้อมูลลงใน cache
             await _cache.SetStringAsync(key, serializedData, new DistributedCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
             });
 
-            //var serializedEmployees = JsonConvert.SerializeObject(employees);
-            //await _cache.SetStringAsync(cacheKey, serializedEmployees, new DistributedCacheEntryOptions
-            //{
-            //    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) // ปรับเวลาหมดอายุของ cache ตามต้องการ
-            //});
 
-            return Content(serializedData);
+            return Content("cache is updated ");
         }
 
     }
