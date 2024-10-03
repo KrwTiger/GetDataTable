@@ -17,7 +17,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 
 //builder.Services.AddHostedService<CacheUpdateService>();
-builder.Services.AddControllersWithViews();
+//builder.Services.AddControllersWithViews();
 
 try{
     var app = builder.Build();

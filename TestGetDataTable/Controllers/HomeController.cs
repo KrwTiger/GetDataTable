@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using System.Buffers;
 using System.Collections;
+using System.Linq;
 
 namespace TestGetDataTable.Controllers
 {
@@ -82,7 +83,7 @@ namespace TestGetDataTable.Controllers
                 string? searchValue = request.searchValue?.ToLower();
                 int orderColumn = request.orderColumn;
                 string? orderDir = request.orderDir;
-                int dbtotal = 0;
+                int dbtotal = 0;    
 
                 IQueryable<Employee> query = _context.Employees;
                 // เช็คข้อมูลใน cache
@@ -94,7 +95,7 @@ namespace TestGetDataTable.Controllers
                     stopwatch.Start();
                     //if (string.IsNullOrEmpty(searchValue))
                     //{
-                        employees = JsonConvert.DeserializeObject<List<Employee>>(cachedData);
+                    employees = JsonConvert.DeserializeObject<List<Employee>>(cachedData);
                     //}
                     //else if (string.IsNullOrEmpty(searchValue) && orderColumn == 0 && orderDir.ToLower() == "asc")
                     //{
@@ -110,14 +111,14 @@ namespace TestGetDataTable.Controllers
                     stopwatch.Start();
                     //_logger.LogInformation(recordsTotal.ToString());
                     dbtotal = await query.CountAsync();
-                    employees = await query.Skip(start).Take(length).ToListAsync();
+                    employees = await query.ToListAsync();
                     stopwatch.Stop();
                     Console.WriteLine("Elapsed db Time: {0} ms", stopwatch.ElapsedMilliseconds);
 
                     //var serializedEmployees = JsonConvert.SerializeObject(employees);
                     //await _cache.SetStringAsync(cacheKey, serializedEmployees, new DistributedCacheEntryOptions
                     //{
-                    //    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) // ปรับเวลาหมดอายุของ cache ตามต้องการ
+                    //    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) 
                     //});
                 }
 
@@ -140,29 +141,44 @@ namespace TestGetDataTable.Controllers
                 stopwatch.Start();
                 if (!string.IsNullOrEmpty(orderDir))
                 {
-                    switch (orderColumn)
+                    //Plan A
+                    //switch (orderColumn)
+                    //{
+                    //    case 0: // Index 0 is column Name
+                    //        employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Name).ToList() : employees.OrderByDescending(e => e.Name).ToList();
+                    //        break;
+                    //    case 1: // Index 1 is column Position
+                    //        employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Position).ToList() : employees.OrderByDescending(e => e.Position).ToList();
+                    //        break;
+                    //    case 2: // Index 2 is column Department
+                    //        employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Department).ToList() : employees.OrderByDescending(e => e.Department).ToList();
+                    //        break;
+                    //    case 3: // Index 3 is column Age
+                    //        employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Age).ToList() : employees.OrderByDescending(e => e.Age).ToList();
+                    //        break;
+                    //    case 4: // Index 4 is column StartDate
+                    //        employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.StartDate).ToList() : employees.OrderByDescending(e => e.StartDate).ToList();
+                    //        break;
+                    //    case 5: // Index 5 is column Salary
+                    //        employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Salary).ToList() : employees.OrderByDescending(e => e.Salary).ToList();
+                    //        break;
+                    //    default:
+                    //        break;
+                    //}
+
+                    //Plan B
+                    Func<Employee, object> caseId = orderColumn switch
                     {
-                        case 0: // Index 0 is column Name
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Name).ToList() : employees.OrderByDescending(e => e.Name).ToList();
-                            break;
-                        case 1: // Index 1 is column Position
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Position).ToList() : employees.OrderByDescending(e => e.Position).ToList();
-                            break;
-                        case 2: // Index 2 is column Department
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Department).ToList() : employees.OrderByDescending(e => e.Department).ToList();
-                            break;
-                        case 3: // Index 3 is column Age
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Age).ToList() : employees.OrderByDescending(e => e.Age).ToList();
-                            break;
-                        case 4: // Index 4 is column StartDate
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.StartDate).ToList() : employees.OrderByDescending(e => e.StartDate).ToList();
-                            break;
-                        case 5: // Index 5 is column Salary
-                            employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(e => e.Salary).ToList() : employees.OrderByDescending(e => e.Salary).ToList();
-                            break;
-                        default:
-                            break;
-                    }
+                        0 => e => e.Id,
+                        1 => e => e.Name,
+                        2 => e => e.Position,
+                        3 => e => e.Department,
+                        4 => e => e.Age,
+                        5 => e => e.StartDate,
+                        6 => e => e.Salary,
+                        _ => e => e.Id
+                    };
+                    employees = (orderDir.ToLower() == "asc") ? employees.OrderBy(caseId).ToList() : employees.OrderByDescending(caseId).ToList();
                 }
                 stopwatch.Stop();
                 Console.WriteLine("Elapsed sorting Time: {0} ms", stopwatch.ElapsedMilliseconds);
@@ -173,7 +189,7 @@ namespace TestGetDataTable.Controllers
                 stopwatch.Stop();
                 Console.WriteLine("Elapsed reponse Time: {0} ms", stopwatch.ElapsedMilliseconds);
 
-                var response = new
+                var response = new 
                 {
                     draw = draw,
                     recordsTotal = recordsTotal,
@@ -198,12 +214,9 @@ namespace TestGetDataTable.Controllers
             {
                 return Content(cachedData);
             }
-
-            // ดึงข้อมูลจากฐานข้อมูล
             var data = await _context.Employees.ToListAsync();
             var serializedData = JsonConvert.SerializeObject(data);
 
-            // เก็บข้อมูลลงใน cache
             await _cache.SetStringAsync(key, serializedData, new DistributedCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
